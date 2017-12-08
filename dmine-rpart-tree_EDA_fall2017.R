@@ -12,17 +12,29 @@ data <- segmentationData[,-c(1,2)]
 library(maptools)
 #------
 
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...) 
+{ 
+  usr <- par("usr"); on.exit(par(usr)) 
+  par(usr = c(0, 1, 0, 1)) 
+  r <- abs(cor(x, y)) 
+  txt <- format(c(r, 0.123456789), digits = digits)[1] 
+  txt <- paste0(prefix, txt) 
+  if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt) 
+  text(0.5, 0.5, txt, cex = cex.cor * r) 
+} 
+
+
 
 #-Loading all commodities for the palouse 1989 - 2015
 
-palouse_sumloss_allcomm <- read.csv("/waf/agmesh-scenarios/Allstates/summaries/palouse_summary_all.csv")
+palouse_sumloss_allcomm <- read.csv("/dmine/data/USDA/agmesh-scenarios/Allstates/summaries/palouse_summary_all.csv")
 palouse_sumloss_allcomm2  <- aggregate(loss ~ year + damagecause + county + commodity,  palouse_sumloss_allcomm, sum)
 palouse_count_allcomm2  <- aggregate(count ~ year + damagecause + county + commodity,  palouse_sumloss_allcomm, sum)
 
 #-Loading all WHEAT claims for the palouse from 1989-2015
 
-palouse_sumloss <- read.csv("/waf/agmesh-scenarios/Allstates/summaries/Palouse_summary_sumloss.csv")
-palouse_counts <- read.csv("/waf/agmesh-scenarios/Allstates/summaries/Palouse_summary_counts.csv")
+palouse_sumloss <- read.csv("/dmine/data/USDA/agmesh-scenarios/Allstates/summaries/Palouse_summary_sumloss.csv")
+palouse_counts <- read.csv("/dmine/data/USDA/agmesh-scenarios/Allstates/summaries/Palouse_summary_counts.csv")
 palouse_sumloss <- aggregate(loss ~ year + damagecause + county,  palouse_sumloss, sum)
 palouse_counts <- aggregate(count ~ year + damagecause + county,  palouse_counts, sum)
 
@@ -30,7 +42,7 @@ palouse_counts <- aggregate(count ~ year + damagecause + county,  palouse_counts
 #-is there a normal signal using just wheat, drought claims across all of the pacific northwest
 
 palouse_sumloss_drought <- subset(palouse_sumloss, damagecause == "Drought")
-qqnorm(palouse_sumloss_drought$cube_loss)
+qqnorm(palouse_sumloss_drought$loss)
 
 
 #use a cube transformation on loss for WHEAT claims
@@ -59,6 +71,10 @@ qqnorm(palouse_sumloss$cube_loss)
 qqnorm(palouse_sumloss$log_loss)
 qqnorm(palouse_sumloss_allcomm2$cube_loss)
 qqnorm(palouse_counts$count)
+
+#box cox transformation
+
+car::boxCoxVariable(palouse_sumloss$loss)
 
 #-factor counties
 palouse_sumloss$county = factor(palouse_sumloss$county,
@@ -321,18 +337,19 @@ lsmeans(all_lm1,
 
 #---
 #--all commodities in Palouse
-plot(cube_loss ~ county + commodity + damagecause + year, data=palouse_sumloss_allcomm2)
+plot(cube_loss ~ county + commodity + damagecause + year, data=palouse_sumloss_allcomm2, las=2) #all commodities
 
-plot(cube_loss ~ county + damagecause + year, data=palouse_sumloss)
+plot(cube_loss ~ county + damagecause + year, data=palouse_sumloss, las=2) #Wheat
 
+#--accessing output of design matrix/time lag data based on monthly selection from dashboard runs
 
-var1 <- read.csv("/waf/tmp/pr_jun2_cube_root_acres_climatecorrelation.csv")
+var1 <- read.csv("/dmine/data/USDA/agmesh-scenarios/Allstates/climatematrix_outputs/pr_jun2_cube_root_acres_climatecorrelation.csv")
 colnames(var1)[9] <- paste(colnames(var1)[2], "_zscore", sep="")
 
 
-var2 <- read.csv("/waf/tmp/pet_jun2_cube_root_acres_climatecorrelation.csv")
+var2 <- read.csv("/dmine/data/USDA/agmesh-scenarios/Allstates/climatematrix_outputs/pet_jun2_cube_root_acres_climatecorrelation.csv")
 colnames(var2)[9] <- paste(colnames(var2)[2], "_zscore", sep="")
-var3 <- read.csv("/waf/tmp/tmmx_jun1_cube_root_acres_climatecorrelation.csv")
+var3 <- read.csv("/dmine/data/USDA/agmesh-scenarios/Allstates/climatematrix_outputs/tmmx_jun1_cube_root_acres_climatecorrelation.csv")
 colnames(var3)[9] <- paste(colnames(var3)[2], "_zscore", sep="")
 
 
@@ -357,7 +374,7 @@ summary(fit) # display Type I ANOVA table
 drop1(fit,~.,test="F") # type III SS and F Tests
 
 
-
+par(mfrow=c(1,1))
 #--Two-way Interaction Plot 
 
 #attach(mtcars)
@@ -370,14 +387,14 @@ interaction.plot(year, county, data1$loss, type="b", col=c(1:3),
                  main="Interaction Plot", las = 2)
 
 # Make big tree
-form <- as.formula(loss_zscore ~ pr_zscore + tmmx_zscore + pet_zscore + fm100_zscore)
+form <- as.formula(loss_zscore ~ pr_zscore + tmmx_zscore + pet_zscore)
 tree.1 <- rpart(form,data=data1,control=rpart.control(minsplit=30,cp=0))
 # 
 plot(tree.1)					# Will make a mess of the plot
 text(tree.1, cex = .5)
 # 
 prp(tree.1)					# Will plot the tree
-prp(tree.1,varlen=3)				# Shorten variable names
+prp(tree.1,varlen=5)				# Shorten variable names
 
 # Interatively prune the tree
 new.tree.1 <- prp(tree.1,snip=TRUE)$obj # interactively trim the tree
@@ -410,7 +427,7 @@ write(jsontree2, file="palousetree.JSON")
 library(rpart)
 
 # grow tree 
-fit <- rpart(loss_zscore ~ pr_zscore + tmmx_zscore + pet_zscore + fm100_zscore, 
+fit <- rpart(loss_zscore ~ pr_zscore + tmmx_zscore + pet_zscore, 
              method="anova", data=data1)
 
 printcp(fit) # display the results 
@@ -434,7 +451,7 @@ post(fit, file = "c:/tree2.ps",
 #---random forest
 
 library(randomForest)
-rfit <- randomForest(loss_zscore ~ pr_zscore + tmmx_zscore + pet_zscore + fm100_zscore,  data=data1)
+rfit <- randomForest(loss_zscore ~ pr_zscore + tmmx_zscore + pet_zscore,  data=data1)
 print(rfit) # view results 
 importance(rfit) # importance of each predictor
 
