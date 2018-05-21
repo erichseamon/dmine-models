@@ -10,6 +10,7 @@ library(mvnormtest)
 data(segmentationData)				# Get some data
 data <- segmentationData[,-c(1,2)]
 library(maptools)
+library(MASS)
 #------
 
 panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...) 
@@ -30,6 +31,9 @@ panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
 palouse_sumloss_allcomm <- read.csv("/dmine/data/USDA/agmesh-scenarios/Allstates/summaries/palouse_summary_all.csv")
 palouse_sumloss_allcomm2  <- aggregate(loss ~ year + damagecause + county + commodity,  palouse_sumloss_allcomm, sum)
 palouse_count_allcomm2  <- aggregate(count ~ year + damagecause + county + commodity,  palouse_sumloss_allcomm, sum)
+
+palouse_sumloss_allcomm2 <- palouse_sumloss_allcomm2[palouse_sumloss_allcomm2$loss >= 1, ]
+
 
 #-Loading all WHEAT claims for the palouse from 1989-2015
 
@@ -74,7 +78,6 @@ qqnorm(palouse_counts$count)
 
 #box cox transformation
 
-car::boxCoxVariable(palouse_sumloss$loss)
 
 #-factor counties
 palouse_sumloss$county = factor(palouse_sumloss$county,
@@ -146,6 +149,8 @@ fligner.test(palouse_sumloss_allcomm2$loss, palouse_sumloss_allcomm2$year)
 
 
 fit <- aov(cube_loss~damagecause, data=palouse_sumloss_allcomm2)
+bc <- boxcox(loss~damagecause, data=palouse_sumloss_allcomm2)
+
 summary(fit) #Type I ANOVA table
 drop1(fit,~.,test="F") # type III SS and Ftests
 
